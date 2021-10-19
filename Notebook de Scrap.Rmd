@@ -1,0 +1,145 @@
+---
+title: "TP1 - Vuelos de Argentina"
+output: html_notebook
+---
+
+Comenzamos por importar las librerías y el dataset.
+
+```{r}
+require(tidyverse)
+require(lubridate)
+
+df1 <- read.csv("aterrizajes-y-despegues-registrados-por-eana-2014.csv", sep=";")
+```
+
+Notamos que df1 tiene espacios en blanco en ciertas columnas de caracteres. Queremos eliminar esos espacios en blanco innecesarios.
+
+```{r}
+df1 = df1 %>%
+        mutate_if(is.character, str_trim)
+```
+
+Como la información de aterrizaje de los vuelos internacionales está incompleta, nos queremos quedar únicamente con los vuelos nacionales, de "Cabotaje".
+
+```{r}
+nacionales = df1 %>%  
+  filter(Clasificación.Vuelo == "Cabotaje")
+```
+
+Queremos agregar una nueva columna que sea de fecha y hora para poder manejar las fechas con mayor facilidad.
+
+```{r}
+nacionales = 
+  nacionales %>% 
+    mutate(Datetime = dmy_h(paste(Fecha, Hora))) %>% 
+    relocate(Datetime) 
+```
+
+Ordenamos según fecha y hora.
+
+```{r}
+nacionales = nacionales[order(nacionales$Datetime),] 
+```
+
+
+
+## Scrapeo y formateo de Wikipedia
+
+```{r}
+require(httr)
+res = GET("https://en.wikipedia.org/wiki/List_of_airports_in_Argentina")
+
+require(rvest)
+pag_aeropuertos = read_html("https://en.wikipedia.org/wiki/List_of_airports_in_Argentina")
+elemento_tabla  = html_element(pag_aeropuertos, '.wikitable')
+
+aeropuertos_argentina = html_table(elemento_tabla)
+
+
+
+for (i in 1:nrow(aeropuertos_argentina)) {
+  coordenadas_plain = aeropuertos_argentina$Coordinates[i]
+
+  coordenadas_sep = strsplit(coordenadas_plain, split = "/")
+  coordenadas_sep = str_trim(coordenadas_sep[[1]][3])
+  coordenadas_sep = strsplit(coordenadas_sep, split = " ")
+
+  lat = str_trim(coordenadas_sep[[1]][1])
+  long = gsub("[^[:graph:]]", "", coordenadas_sep[[1]][2])
+  
+  lat = as.numeric(substr(lat, 0, nchar(lat) - 1))
+  long = as.numeric(long)
+
+  aeropuertos_argentina$lat[i] = lat
+  aeropuertos_argentina$long[i] = long
+}
+```
+
+Falta el aeropuerto SANH de Argentina, llenemos esa info a mano.
+
+```{r}
+SANH = c("Ternas de Río Hondo", 
+         "Santiago del Estero", 
+         "SANH", 
+         "",
+         "Aeropuerto Internacional Termas de Río Hondo",
+         "",
+         -27.510556,
+         -64.948333)
+
+aeropuertos_argentina = rbind(aeropuertos_argentina, SANH)
+```
+
+
+## Manejo de las distancias
+
+```{r}
+oaci_a_latlong = function(oaci){
+ index = which(aeropuertos_argentina$ICAO == oaci)
+ lat = aeropuertos_argentina$lat[index]
+ long = aeropuertos_argentina$long[index]
+
+ return(c(lat,long))
+}
+
+require(geosphere)
+
+class(aeropuertos_argentina$lat)
+
+nacionales = nacionales %>% 
+   filter(!str_detect(Origen.OACI, "^AR"), 
+          !str_detect(Destino.OACI, "^AR"),
+          !str_detect(Destino.OACI, "[:digit:]$"),
+          !str_detect(Origen.OACI, "[:digit:]$"),
+          Origen.OACI != "N/A",
+          Destino.OACI != "N/A",
+          Destino.OACI != "SAVO",
+          Origen.OACI != "SAVO",
+          Destino.OACI != "LCP",
+          Origen.OACI != "LCP",
+          Destino.OACI != "SAVA",
+          Origen.OACI != "SAVA"
+          )
+
+nacionales$distancia = 0
+
+distHaversine(as.numeric(oaci_a_latlong("SAWG")), 
+              as.numeric(oaci_a_latlong("SABE")))
+
+
+for (i in 1:nrow(nacionales)) {
+  if (i %% 500 == 0){
+    print(paste("Fila: ", i))
+  }
+
+  
+  
+  origen = nacionales$Origen.OACI[i]
+  destino = nacionales$Destino.OACI[i]
+  nacionales$distancia[i] = distHaversine(as.numeric(oaci_a_latlong(origen)), 
+                                          as.numeric(oaci_a_latlong(destino)))
+
+  # print(distHaversine(oaci_a_latlong(origen), oaci_a_latlong(destino))) 
+}
+```
+
