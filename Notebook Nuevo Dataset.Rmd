@@ -1,0 +1,253 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+##Lectura del dataset de aeropuertos
+
+```{r}
+aeropuertos = read.csv("sna_abril_2021.csv", encoding = "UTF-8")
+```
+
+
+##Lectura del Dataset y filtrado. 
+
+```{r}
+require(tidyverse)
+require(lubridate)
+
+df1 <- read.csv("202109-informe-ministerio.csv", sep=";", encoding = "UTF-8")
+
+df1 = 
+  df1 %>% 
+    mutate(Datetime = dmy_hm(paste(Fecha, Hora.UTC))) %>% 
+    relocate(Datetime)
+
+domestico =  df1 %>% 
+  filter(Clasificación.Vuelo == "Dom")
+
+```
+
+##Agregado de distancias
+
+```{r}
+require(geosphere)
+
+
+
+domestico$distancia = NA
+domestico$aeropuerto.x = NA
+domestico$aeropuerto.y = NA
+
+domestico$origen.destino.x = NA
+domestico$origen.destino.y = NA
+
+for (i in 1:nrow(domestico)){
+  
+  if(i %% 1000 == 0){
+    print(i)
+  }
+  
+  aeropuerto = domestico$Aeropuerto[i]
+  origen.destino = domestico$Origen...Destino[i]
+  
+  index.aeropuerto = which(aeropuertos$ana == aeropuerto)
+  index.origen.destino = which(aeropuertos$ana == origen.destino)
+
+  if(!is_empty(index.aeropuerto) && !is_empty(index.origen.destino)){
+    latlong.aeropuerto = c(aeropuertos$x[index.aeropuerto], aeropuertos$y[index.aeropuerto])
+    latlong.origen.destino = c(aeropuertos$x[index.origen.destino], aeropuertos$y[index.origen.destino])
+    
+    domestico$distancia[i] = distHaversine(latlong.origen.destino, latlong.aeropuerto)
+    # domestico$aeropuerto.x[i] = aeropuertos$x[index.aeropuerto]
+    # domestico$aeropuerto.y[i] = aeropuertos$y[index.aeropuerto]
+    # 
+    # domestico$origen.destino.x[i] = aeropuertos$x[index.origen.destino]
+    # domestico$origen.destino.y[i] = aeropuertos$y[index.origen.destino]
+  }
+  
+  
+  
+}
+
+```
+
+
+##Intento de grafo de vuelos
+
+```{r}
+require(maps)
+require(geosphere)
+pdf(file="fligths1.pdf")
+maps::map("world", regions = "Argentina", fill=T, col="grey8", bg="grey15")
+points(aeropuertos$x, aeropuertos$y, pch=3, cex=0.1, col="chocolate1")
+
+# inter = gcIntermediate(c(aeropuertos$x[1], aeropuertos$y[1]), c(aeropuertos$x[2], aeropuertos$y[2]))
+# lines(inter,lwd=0.1, col="turquoise2")
+
+for (i in 1:50000) { #Se puede variar el loop
+  if (!is.na(domestico$aeropuerto.x[i]) & 
+      !is.na(domestico$aeropuerto.y[i]) &
+      !is.na(domestico$origen.destino.x[i]) &
+      !is.na(domestico$origen.destino.y[i])){
+          
+    inter = gcIntermediate(c(domestico$aeropuerto.x[i], domestico$aeropuerto.y[i]), 
+                           c(domestico$origen.destino.x[i], domestico$origen.destino.y[i]))
+    lines(inter, lwd=0.001,
+           col = rgb(red = 0, green = 0.87, blue = 1, alpha = 0.1)
+          # col="turquoise2"
+          )
+        
+      }
+
+}
+
+```
+
+##Segundo intento de grafo de vuelos para mostrar densidad de vuelos
+
+```{r}
+freq = domestico %>% 
+  select(c(Aeropuerto, Origen...Destino))
+
+freq$count = 1
+freq = aggregate(count ~ ., freq, FUN = sum)
+
+summary(freq$count)
+```
+
+
+```{r}
+require(tidyverse)
+
+mapa = map_data("world", region="Argentina")
+
+domestico %>% 
+  filter(Aeropuerto == "MOR",
+         Origen...Destino == "MOR")
+
+
+freq$aeropuerto.x = NA
+freq$aeropuerto.y = NA
+
+freq$origen.destino.x = NA
+freq$origen.destino.y = NA
+
+for (i in 1:nrow(freq)){
+  
+  if(i %% 1000 == 0){
+    print(i)
+  }
+  
+  aeropuerto = freq$Aeropuerto[i]
+  origen.destino = freq$Origen...Destino[i]
+  
+  index.aeropuerto = which(aeropuertos$ana == aeropuerto)
+  index.origen.destino = which(aeropuertos$ana == origen.destino)
+
+  if(!is_empty(index.aeropuerto) && !is_empty(index.origen.destino)){
+
+    freq$aeropuerto.x[i] = aeropuertos$x[index.aeropuerto]
+    freq$aeropuerto.y[i] = aeropuertos$y[index.aeropuerto]
+    
+    freq$origen.destino.x[i] = aeropuertos$x[index.origen.destino]
+    freq$origen.destino.y[i] = aeropuertos$y[index.origen.destino]
+  }
+  
+}
+
+freq = freq %>%
+  # filter(Aeropuerto != Origen...Destino) %>% 
+  arrange(desc(count))
+
+require(ggplot2)
+ggplot() +
+  geom_polygon(data = mapa, aes(x=long, y=lat, group=group), fill="#292929")+
+  geom_curve(data = freq, aes(x = aeropuerto.x,
+                              y = aeropuerto.y,
+                              xend = origen.destino.x,
+                              yend = origen.destino.y,
+                              color = count,
+                              alpha = count),
+             size = 0.2, curvature = .1) +
+  coord_fixed(1.2) +
+  geom_point(data = aeropuertos, aes(x = x, y = y), color = "orange", size=0.5) +
+  scale_colour_gradientn(colours = cm.colors(4))+
+   theme(panel.background = element_rect(fill="white"), 
+   axis.line = element_blank(),
+   axis.text.x = element_blank(),
+   axis.text.y = element_blank(),
+   axis.ticks = element_blank(),
+   axis.title.x = element_blank(),
+   axis.title.y = element_blank()
+ )
+
+  
+
+
+
+# ggsave("Test9.pdf")
+```
+
+
+## Aeropuertos faltantes en el dataset
+```{r}
+
+t =  domestico %>% 
+      filter(is.na(distancia))
+l1 = unique(t$Aeropuerto)
+l2 = unique(t$Origen...Destino)
+
+
+faltantes = c()
+contador = 0
+for (i in 1:length(l1)){
+  aeropuerto = l1[i]
+  if (length(which(aeropuertos$ana == aeropuerto)) == 0){
+    contador = contador + 1
+    faltantes = c(faltantes, aeropuerto)
+  }
+}
+
+for (i in 1:length(l2)){
+  aeropuerto = l2[i]
+  if (length(which(aeropuertos$ana == aeropuerto)) == 0){
+    contador = contador + 1
+    faltantes = c(faltantes, aeropuerto)
+  }
+}
+
+length(l1)
+
+length(which(aeropuertos$ana == "sfd")) == 0
+```
+## Análisis de viajes por fecha
+
+### Primero veamos cuántos vuelos hay 
+
+```{r fig.height=8, fig.width=12}
+require(ggplot2)
+
+vuelos.mes = domestico
+
+vuelos.mes = vuelos.mes %>% 
+  mutate(mes = format(Datetime, format = "%m"), dia = format(Datetime, format = "%d")) %>% 
+  select(dia, mes, everything())
+
+
+freq.mes.aero = data.frame(table(vuelos.mes$dia, vuelos.mes$mes))
+
+colnames(freq.mes.aero) = c("dia", "mes", "frecuencia")
+
+cuartiles.freq = data.frame(cuartil = quantile(freq.mes.aero$frecuencia), color = rainbow(5))
+
+ggplot(data = freq.mes.aero) +
+  geom_line(aes(x = dia, y = frecuencia, group=1)) +  
+  geom_hline(data = cuartiles.freq, aes(yintercept = cuartil,color = color)) +
+  facet_wrap(~ mes, scales= "free_x") + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+# ggsave(path = "frecuencia", filename = "frecuencia_dia.pdf")
+  
+```
+Parece no tener demasiado sentido. Podríamos ver cómo se comporta sin los vuelos de entrenamiento.

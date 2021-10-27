@@ -1,0 +1,23 @@
+1. Cuáles son las aeronaves más rápidas.
+2. Qué aeronaves se usan para qué tipos de recorridos.
+
+3. Cuáles son los aeropuertos más transitados.
+
+4. Algo con el tiempo de las aerolíneas.
+
+5. Cuáles son los países con mayor destino.
+
+5. Las ciudades más transitadas.
+
+6. Qué tipo de avión se usa más y menos (ver frecuencia por tipo de avión).
+
+Ver frecuencia por día sobre el aeropuerto de Morón (vuelo escuela).
+
+6. Cómo cambia la frecuencias de vuelos por mes.
+7. Cómo cambia la frecuencia de vuelos por hora.
+8. Cómo cambian las velocidades en días con lluvia.
+9. Cómo cambian las frecuencias con el tiempo del año. 
+
+Explicar que hay muchos más aeropuertos de despegue que de llegada (Qué pasa con esos aviones?)
+Es bueno que hayan tantos vuelos de práctica
+Ver qué pasa cuando se pierden pasajeros.

@@ -1,0 +1,96 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# Carga de Datos y filtrado inicial.
+```{r}
+require(tidyverse)
+require(lubridate)
+
+df1 <- read.csv("202109-informe-ministerio.csv", sep=";", encoding = "UTF-8")
+
+df1 = 
+  df1 %>% 
+    mutate(Datetime = dmy_hm(paste(Fecha, Hora.UTC))) %>% 
+    relocate(Datetime)
+
+domestico =  df1 %>% 
+  filter(Clasificación.Vuelo == "Dom")
+
+domestico = domestico[order(domestico$Datetime),]
+```
+
+```{r}
+despegue.aterrizaje = domestico %>% 
+  select(!Fecha & !Hora.UTC & !Calidad.dato & !Clasificación.Vuelo)
+
+despegue.aterrizaje$elegido = FALSE
+despegue.aterrizaje$Tiempo.de.Vuelo = NA
+despegue.aterrizaje$Diferencia.Pasajeros = NA
+
+count = nrow(despegue.aterrizaje)
+
+for (i in 1:count) {
+
+  if (i %% 100 == 0){
+    print(i)
+  }
+
+  fila1 = despegue.aterrizaje[i,]
+
+  if (fila1$Tipo.de.Movimiento == "Despegue" & !fila1$elegido){
+    for (j in i:count) {
+
+      fila2 = despegue.aterrizaje[j,]
+
+      if(difftime(fila2$Datetime, fila1$Datetime, units = "hours") > 12){
+        break
+      }
+
+
+      if(fila2$Tipo.de.Movimiento == "Aterrizaje" &
+         !fila2$elegido &
+         fila1$Clase.de.Vuelo..todos.los.vuelos. == fila2$Clase.de.Vuelo..todos.los.vuelos. &
+         fila1$Aeropuerto == fila2$Aeropuerto &
+         fila1$Origen...Destino == fila2$Origen...Destino &
+         # fila1$Aerolinea.Nombre == fila2$Aerolinea.Nombre &
+         fila1$Aeronave == fila2$Aeronave
+         #NO ESTAMOS VIENDO LO DE LOS PASAJEROS
+         ){
+        
+          despegue.aterrizaje[i, "Tiempo.de.Vuelo"] = difftime(fila2$Datetime, 
+                                                               fila1$Datetime, 
+                                                               units = "hours")
+          
+          despegue.aterrizaje[i, "Diferencia.Pasajero"] = abs(fila1$Pasajeros - fila2$Pasajeros)
+          despegue.aterrizaje[i,"elegido"] = TRUE
+          despegue.aterrizaje[j,"elegido"] = TRUE
+          break
+         }
+
+    }
+  }
+}
+
+
+write.csv(despegue.aterrizaje,"./datasets/depegue_aterrizaje-sin_nombre_aerolinea-con_origen_destino_igual.csv")
+
+summary(despegue.aterrizaje$Diferencia.Pasajero)
+summary(despegue.aterrizaje$Tiempo.de.Vuelo)
+
+```
+
+
+
+```{r}
+require(ggplot2)
+
+plot(sort(despegue.aterrizaje$Diferencia.Pasajero))
+plot(sort(despegue.aterrizaje$Tiempo.de.Vuelo))
+
+sum(!is.na(despegue.aterrizaje$Diferencia.Pasajero))
+
+
+```
+
