@@ -28,47 +28,38 @@ domestico =  df1 %>%
 
 ```
 
+##Agregado de distancias usando LEFT JOIN
+
+```{r}
+aeropuertos.info.necesaria.aero <- aeropuertos %>% 
+  select(cpr, nom_ciudad, ana, x,y) %>% 
+  rename(Provincia = cpr, Ciudad = nom_ciudad, x.aeropuerto = x, y.aeropuerto = y)
+
+aeropuertos.info.necesaria.orig...dest <- aeropuertos %>% 
+  select(cpr, nom_ciudad, ana, x,y) %>% 
+  rename(Provincia = cpr, Ciudad = nom_ciudad, x.orig...dest = x, y.orig...dest = y)
+
+domestico.geo <- domestico %>% 
+  left_join(aeropuertos.info.necesaria.aero, by = c("Aeropuerto" = "ana")) %>% 
+  left_join(aeropuertos.info.necesaria.orig...dest, by = c("Origen...Destino" = "ana"))
+```
+
+
 ##Agregado de distancias
 
 ```{r}
 require(geosphere)
 
+##Trabajamos con domestico.geo
 
+domestico.dist <- domestico.geo %>% 
+  mutate(distancia = ifelse(
+    !is.na(x.aeropuerto) & !is.na(y.aeropuerto) & !is.na(x.orig...dest) & !is.na(y.orig...dest),
+    distHaversine(cbind(x.aeropuerto, y.aeropuerto), cbind(x.orig...dest, y.orig...dest)),
+    NA
+  ))
 
-domestico$distancia = NA
-domestico$aeropuerto.x = NA
-domestico$aeropuerto.y = NA
-
-domestico$origen.destino.x = NA
-domestico$origen.destino.y = NA
-
-for (i in 1:nrow(domestico)){
-  
-  if(i %% 1000 == 0){
-    print(i)
-  }
-  
-  aeropuerto = domestico$Aeropuerto[i]
-  origen.destino = domestico$Origen...Destino[i]
-  
-  index.aeropuerto = which(aeropuertos$ana == aeropuerto)
-  index.origen.destino = which(aeropuertos$ana == origen.destino)
-
-  if(!is_empty(index.aeropuerto) && !is_empty(index.origen.destino)){
-    latlong.aeropuerto = c(aeropuertos$x[index.aeropuerto], aeropuertos$y[index.aeropuerto])
-    latlong.origen.destino = c(aeropuertos$x[index.origen.destino], aeropuertos$y[index.origen.destino])
-    
-    domestico$distancia[i] = distHaversine(latlong.origen.destino, latlong.aeropuerto)
-    # domestico$aeropuerto.x[i] = aeropuertos$x[index.aeropuerto]
-    # domestico$aeropuerto.y[i] = aeropuertos$y[index.aeropuerto]
-    # 
-    # domestico$origen.destino.x[i] = aeropuertos$x[index.origen.destino]
-    # domestico$origen.destino.y[i] = aeropuertos$y[index.origen.destino]
-  }
-  
-  
-  
-}
+write.csv(domestico.dist,"vuelos_2021_distancia_geografia.csv")
 
 ```
 
